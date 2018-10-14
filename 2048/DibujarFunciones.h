@@ -1,7 +1,9 @@
 #ifndef DIBUJAR_H
 #define DIBUJAR_H
 
+#ifndef DEBUG
 #define DEBUG 1
+#endif
 
 #include <vector>
 #include <cstdlib>
