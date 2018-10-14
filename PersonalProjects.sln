@@ -5,6 +5,8 @@ VisualStudioVersion = 15.0.28010.2046
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "2048", "2048\2048.vcxproj", "{620CDAD1-3909-454D-9A94-6DF4A7B25221}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MazeRunner", "MazeRunner\MazeRunner.vcxproj", "{42A95AA8-D161-4D18-8B82-87ECCA297B59}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -21,6 +23,14 @@ Global
 		{620CDAD1-3909-454D-9A94-6DF4A7B25221}.Release|x64.Build.0 = Release|x64
 		{620CDAD1-3909-454D-9A94-6DF4A7B25221}.Release|x86.ActiveCfg = Release|Win32
 		{620CDAD1-3909-454D-9A94-6DF4A7B25221}.Release|x86.Build.0 = Release|Win32
+		{42A95AA8-D161-4D18-8B82-87ECCA297B59}.Debug|x64.ActiveCfg = Debug|x64
+		{42A95AA8-D161-4D18-8B82-87ECCA297B59}.Debug|x64.Build.0 = Debug|x64
+		{42A95AA8-D161-4D18-8B82-87ECCA297B59}.Debug|x86.ActiveCfg = Debug|Win32
+		{42A95AA8-D161-4D18-8B82-87ECCA297B59}.Debug|x86.Build.0 = Debug|Win32
+		{42A95AA8-D161-4D18-8B82-87ECCA297B59}.Release|x64.ActiveCfg = Release|x64
+		{42A95AA8-D161-4D18-8B82-87ECCA297B59}.Release|x64.Build.0 = Release|x64
+		{42A95AA8-D161-4D18-8B82-87ECCA297B59}.Release|x86.ActiveCfg = Release|Win32
+		{42A95AA8-D161-4D18-8B82-87ECCA297B59}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
