@@ -13,6 +13,9 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Imagenes de prueba">
+      <UniqueIdentifier>{034a32c2-ac9c-43f5-bf63-b2771d5ac995}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pch.h">
@@ -26,5 +29,16 @@
     <ClCompile Include="MazeRunner.cpp">
       <Filter>Archivos de origen</Filter>
     </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="maze_inv.bmp">
+      <Filter>Imagenes de prueba</Filter>
+    </Image>
+    <Image Include="maze234.bmp">
+      <Filter>Imagenes de prueba</Filter>
+    </Image>
+    <Image Include="maze234_inv.bmp">
+      <Filter>Imagenes de prueba</Filter>
+    </Image>
   </ItemGroup>
 </Project>

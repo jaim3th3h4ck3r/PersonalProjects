@@ -167,30 +167,6 @@ void DibujarFunciones::correrFilaHorizontal(int fila, int direccion) {
 	debug->writeDebug(1, fila);
 #endif
 	return;
-
-	//    int start;
-//    
-//    if(direccion == 1){start = 0;}
-//    else{start = max_altura - 1;}
-//    
-//    for(int i=start; i>=0 && i<max_altura; i+=direccion){
-//        while(getCasillas(i, fila) == 0){
-////            if(filaEsCero(fila, i, (max_altura-1)-start) == true){
-////                // Justo despues del primer 'for', sin ejecutar la instruccion despues del segundo 'for'
-////                goto breakpoint;
-////            }
-//            for(int j = i + direccion; (i+j) >= 0 && (i+j) < max_altura; j+=direccion){
-//                setCasillas(i+j, fila, getCasillas(i + j + direccion, fila));
-//            }
-//        }
-//    }
-//    
-////    breakpoint:
-//    #if DEBUG == 1
-//    debug->writeDebug(1, fila);
-//    #endif
-//    
-//    return;
 }
 
 void DibujarFunciones::sumarFilaHorizontal(int fila, int direccion) {
