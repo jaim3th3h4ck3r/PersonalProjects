@@ -151,8 +151,6 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="DibujarDebug.h" />
-    <ClInclude Include="DibujarFunciones.h" />
     <ClInclude Include="pch.h" />
   </ItemGroup>
   <ItemGroup>
