@@ -4,13 +4,13 @@
 #include <iomanip>
 #include <fstream>
 #include <cstdlib>
-#include <string>
+#include <conio.h>
 #include <vector>
 #include <ctime>
 
 //include for debugging
-//remove for production
-#define IS_DEBUGGING
+//comment out for production
+//#define IS_DEBUGGING
 
 
 enum callerTypes {
@@ -64,6 +64,7 @@ class DibujarFunciones {
 	
 };
 
+#ifdef IS_DEBUGGING
 class DibujarDebug {
 	public:
 		explicit DibujarDebug(DibujarFunciones* dibujar_param);
@@ -75,20 +76,26 @@ class DibujarDebug {
 		std::ofstream dbgFile;
 		DibujarFunciones* dibujar;
 };
+#endif
 
 
 
 int main(int argc, char **argv) {
 	int altura;
-	std::string entrada;
+	//std::string entrada;
+	
+	int charEntrada;
 
 	if (argc == 2 && atoi(argv[1]) != 0)
 		altura = atoi(argv[1]);
 	else
 		altura = 4;
 
+	bool isExit = false;
+	bool isNewGame;
+	bool entryIsGood;
 
-	while (true) {
+	while (!isExit) {
 		DibujarFunciones *Dibujar1 = new DibujarFunciones(altura);
 
 		//Para debugear
@@ -96,47 +103,64 @@ int main(int argc, char **argv) {
 		DibujarDebug *Debug = new DibujarDebug(Dibujar1);
 		#endif
 
-		while (true) {
+		isNewGame = false;
+		while (!isNewGame) {
 			Dibujar1->nuevaCasilla();
 			Dibujar1->dibujarCasillas();
-			std::cout << std::endl << std::endl << "Siguiente movimiento: ";
-			std::cin >> entrada;
-			if (entrada == "nuevo")break;
-			while (true) {
-				if (entrada == "arriba") {
-					Dibujar1->correrMatriz(1);
-					break;
+			std::cout << std::endl << std::endl << "Siguiente movimiento: (flechas para moverse, N para nuevo juego, Esc para salir)";
+
+			entryIsGood = false;
+			while (!entryIsGood) {
+				charEntrada = _getch();
+				if (charEntrada == 0xE0) {
+					charEntrada = _getch();
+					switch (charEntrada) {
+						case 72:
+							Dibujar1->correrMatriz(1);
+							entryIsGood = true;
+							break;
+						case 80:
+							Dibujar1->correrMatriz(2);
+							entryIsGood = true;
+							break;
+						case 75:
+							Dibujar1->correrMatriz(3);
+							entryIsGood = true;
+							break;
+						case 77:
+							Dibujar1->correrMatriz(4);
+							entryIsGood = true;
+							break;
+						default:
+							std::cout << "Comando invalido" << std::endl << std::endl << "Siguiente movimiento: ";
+					}
+				} else {
+					switch (charEntrada) {
+						case 110:
+							entryIsGood = true;
+							isNewGame = true;
+							break;
+						case 27:
+							entryIsGood = true;
+							isNewGame = true;
+							isExit = true;
+							break;
+					}
 				}
-				else if (entrada == "abajo") {
-					Dibujar1->correrMatriz(2);
-					break;
-				}
-				else if (entrada == "izquierda") {
-					Dibujar1->correrMatriz(3);
-					break;
-				}
-				else if (entrada == "derecha") {
-					Dibujar1->correrMatriz(4);
-					break;
-				}
-				else {
-					std::cout << "Comando invalido" << std::endl << std::endl << "Siguiente movimiento: ";
-					std::cin >> entrada;
-				}
+				
 			}
 			system("cls");
 		}
 		system("cls");
 
 		//Para debugear
-		#ifdef DIBUJARDEBUG_H
+		#ifdef IS_DEBUGGING
 		delete Debug;
 		#endif
 
 		delete Dibujar1;
 	}
 }
-
 
 
 //____________________________________________________________________________________
@@ -391,6 +415,7 @@ void DibujarFunciones::setDebugInterface(DibujarDebug* debug_param) {
 }
 
 
+#ifdef IS_DEBUGGING
 //____________________________________________________________________________________
 //Definicion de functiones de DibujarDebug
 //____________________________________________________________________________________
@@ -434,3 +459,4 @@ void DibujarDebug::writeError(int error, int caller, int param1, int param2, int
 	}
 	dbgFile.close();
 }
+#endif
