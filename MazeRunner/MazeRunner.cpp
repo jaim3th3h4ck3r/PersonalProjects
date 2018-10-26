@@ -1,6 +1,9 @@
-﻿#include <iostream>
+﻿#include "pch.h"
+
+#include <iostream>
 #include <iomanip>
 #include <fstream>
+#include <conio.h>
 
 #include <string>
 #include <vector>
@@ -8,6 +11,8 @@
 
 #include <chrono>
 #include <thread>
+#include <mutex>
+#include <windows.h>
 
 #include <stdexcept>
 
@@ -28,10 +33,8 @@ struct COORD_MAZE {
 	const bool isWall = false;
 	unsigned char direction = 0b0000;
 	unsigned short pathID = 1;
-	explicit COORD_MAZE(bool T) :isWall(T), isVisited(T) {}
+	explicit COORD_MAZE(bool T): isVisited(T), isWall(T) {}
 };
-
-
 
 
 /*Insert all SUPPORTING VARIABLES here (ie. not critical to the algorithm)*/								 
@@ -39,7 +42,7 @@ struct COORD_MAZE {
 //Size of padding needed to complete .bmp file																 //
 unsigned int rawPadding = 0;																				 //
 //name of default image file; on same folder as executable													 //
-std::string fileDefaultName = "maze_inv.bmp";																 //
+std::wstring fileDefaultName = L"maze_inv.bmp";																 //
 //Pointer to image file in memory																			 //
 //Only used to load file into memory for conversion into vector array and as base of final .bmp file		 //
 char* rawImageBlock;																						 //
@@ -48,18 +51,23 @@ int fileBinarySize;																						   	 //
 std::vector<std::pair <unsigned int, unsigned int>> changedPos;												 //
 //String for error throwing																					 //
 std::string errorString;																					 //
+//Mutex and condition variable
+std::mutex debug;
+std::condition_variable isDebugComplete;
 																											 //
 /*CHILD FUNCTIONS*/																							 //
 //writes vector array data to diagnostic .txt file															 //
 void write_debug(unsigned int maxColumn = 256, unsigned int maxRow = 256);									 //
 //writes vector array to final pretty .bmp image															 //
 void write_image();																							 //
+//Writes vector to second console																			 //
+void write_console(const unsigned short maxColumn, const unsigned short maxRow);								 //
 //___________________________________________________________________________________________________________//
 
 
 
 //Size of maze pixels to navigate
-unsigned int mazeNumberRows, mazeNumberColumns;
+unsigned short mazeNumberRows, mazeNumberColumns;
 
 //2D vector, used for positioning
 //Global because writing functions use it for writing data
@@ -72,7 +80,7 @@ std::vector < std::vector <COORD_MAZE> > mazeVector;
 //If a certain pathID is a dead end, it's vector coordinate is set to true
 std::vector <bool> isPathIDDeadEnd{ true };
 
-int main(int argc, char** argv){
+int wmain(int argc, wchar_t** argv){
 	{
 		char* rawImagePointer;
 
@@ -84,12 +92,12 @@ int main(int argc, char** argv){
 			do {
 				isFileGood = true;
 
-				std::cout << "Enter file name: ";
-				std::cin >> fileDefaultName;
+				std::wcout << L"Enter file name: ";
+				std::wcin >> fileDefaultName;
 
 				maze.open(fileDefaultName, std::ios::in | std::ios::binary | std::ios::ate);
 				if (!maze.is_open() || maze.bad()) {
-					std::cerr << "Error opening file. Try again." << std::endl;
+					std::wcerr << L"Error opening file. Try again." << std::endl;
 					isFileGood = false;
 				}
 			} while (!isFileGood);
@@ -102,13 +110,13 @@ int main(int argc, char** argv){
 
 				maze.open(fileDefaultName, std::ios::in | std::ios::binary | std::ios::ate);
 				if (!maze.is_open() || maze.bad()) {
-					std::cerr << "Error opening file. Try again." << std::endl;
+					std::wcerr << L"Error opening file. Try again." << std::endl;
 					isFileGood = false;
 
-					std::cout << "Enter file name: ";
-					std::cin >> fileDefaultName;
+					std::wcout << L"Enter file name: ";
+					std::wcin >> fileDefaultName;
 				} else {
-					std::cout << "File: " << fileDefaultName << std::endl;
+					std::wcout << L"File: " << fileDefaultName << std::endl;
 				}
 				
 			} while (!isFileGood);
@@ -133,34 +141,35 @@ int main(int argc, char** argv){
 		rawPadding = (3 * mazeNumberRows) % 4;
 
 		//Resize coor to match maze dimensions
-		mazeVector.resize(mazeNumberColumns);
-		if (mazeNumberColumns > mazeVector.capacity()) {
-			return -10;
-		}
+		try {
+			mazeVector.resize(mazeNumberColumns);
 
-		//Vector-writing loops
-		//Row loop = y-coordinate
-		for (unsigned int a = 0; a < mazeNumberColumns; a++) {
-			
-			mazeVector[a].reserve(mazeNumberRows);
-			if (mazeNumberRows > mazeVector[a].capacity()) {
-				return -11;
-			}
+			//Vector-writing loops
+			//Row loop = y-coordinate
+			for (unsigned int a = 0; a < mazeNumberColumns; a++) {
 
-			//Column loop = x-coordinate
-			for (unsigned int b = 0; b < mazeNumberRows; b++) {
+				mazeVector[a].reserve(mazeNumberRows);
 
-				//Location of data in order
-				int rawOffset = a * mazeNumberRows + b;
-				if (*(rawImagePointer + (3 * rawOffset) + (a * rawPadding)) == 0) {
-					mazeVector[a].emplace_back(true);
-				} else {
-					mazeVector[a].emplace_back(false);
+				//Column loop = x-coordinate
+				for (unsigned int b = 0; b < mazeNumberRows; b++) {
+
+					//Location of data in order
+					int rawOffset = a * mazeNumberRows + b;
+					if (*(rawImagePointer + (3 * rawOffset) + (a * rawPadding)) == 0) {
+						mazeVector[a].emplace_back(true);
+					} else {
+						mazeVector[a].emplace_back(false);
+					}
 				}
 			}
+		} catch (std::bad_alloc &e) {
+			std::wcerr << L"ERROR: Bad vector allocation -- " << e.what();
+			return -1;
 		}
+
 		//Write image as a test
 		write_image();
+		write_debug(mazeNumberColumns, mazeNumberRows);
 	}
 	// 2D vector complete
 	// Start solving algorithm
@@ -196,18 +205,20 @@ int main(int argc, char** argv){
 	std::chrono::steady_clock::time_point solveTimeBegin = std::chrono::steady_clock::now();
 
 	//Tries to find an entry point on the upper and left edges of the image
-	for (unsigned int x = 0, y = 0; x < mazeNumberRows - 1 || y < mazeNumberColumns - 1;) {
+	for (unsigned short x = 0, y = 0; x < mazeNumberRows - 1 || y < mazeNumberColumns - 1;) {
 		if (!mazeVector[x][0].isWall) {
 			currentCoord.emplace_back(x, 0);
 			mazeVector[x][0].direction = ALL_DIR;
 			mazeVector[x][0].isVisited = true;
-			break;
+			x = 0xFFFF;
+			y = 0xFFFF;
 
 		} else if (!mazeVector[0][y].isWall) {
 			currentCoord.emplace_back(0, y);
 			mazeVector[0][y].direction = ALL_DIR;
 			mazeVector[0][y].isVisited = true;
-			break;
+			x = 0xFFFF;
+			y = 0xFFFF;
 		}
 
 		if (x < mazeNumberRows - 1) {
@@ -218,7 +229,7 @@ int main(int argc, char** argv){
 		}
 	}
 
-	std::thread printDebug (write_debug, mazeNumberColumns, mazeNumberRows);
+	std::thread printDebug (write_console, mazeNumberColumns, mazeNumberRows);
 	printDebug.detach();
 
 	try{
@@ -226,8 +237,9 @@ int main(int argc, char** argv){
 		isPathIDDeadEnd.emplace_back(false);
 
 		while (!isFinished) {
-			
-			system("pause");
+
+			std::unique_lock<std::mutex> lock(debug);
+			isDebugComplete.wait(lock);
 
 			if (!newCoord.empty()) {
 				currentCoord.swap(newCoord);
@@ -244,9 +256,9 @@ int main(int argc, char** argv){
 
 			iterations = static_cast<unsigned short> (currentCoord.size());
 
-			for (auto& iter : currentCoord) {
+			hasNeighborNormal = false;
 
-				hasNeighborNormal = false;
+			for (auto& iter : currentCoord) {
 
 				hasNeighborPos = false;
 				hasNeighborNeg = false;
@@ -386,7 +398,7 @@ int main(int argc, char** argv){
 							mazeVector[iter.first + firstModifier][iter.second + secondModifier].isVisited = true;
 							mazeVector[iter.first + firstModifier][iter.second + secondModifier].pathID 
 								= mazeVector[iter.first][iter.second].pathID;
-							mazeVector[iter.first + firstModifier][iter.second + secondModifier].direction = DIR;
+							mazeVector[iter.first + firstModifier][iter.second + secondModifier].direction = static_cast<unsigned char>(DIR);
 
 							changedPos.emplace_back(iter.first + firstModifier, iter.second + secondModifier);
 
@@ -448,52 +460,48 @@ void write_debug(const unsigned int maxColumn, const unsigned int maxRow) {
 	//Yes, I know the code looks like crap. Don't judge. I wrote this two  years ago (save for a couple changes here and there)
 	//Good thing is, it just works fine (except when the maze size is above 1000 in one dimension, in which case it just breaks down lol)
 
-	std::ofstream debug;
+	std::ofstream debugFile;
 
-	while (true) {
-		std::this_thread::sleep_for(std::chrono::seconds(2));
+	debugFile.open("debug.log", std::ios::out | std::ios::trunc | std::ios::beg);
 
-		debug.open("debug.log", std::ios::out | std::ios::trunc | std::ios::beg);
-
-		for (int i = -4; (i < 0?(static_cast<unsigned int>(i) > maxRow): (static_cast<unsigned int>(i) < maxRow)); i++) {
-			if (i < -1) {
-				debug << "row ";
-				for (unsigned int j = 0; j < maxColumn; j++) {
-					debug << (j / static_cast<int>(pow(10,(abs(i) - 2)))) % 10;
-				}
-			} else if (i == -1) {
-				debug << "col";
-				for (unsigned int j = 0; j < maxColumn; j++) {
-					debug << '_';
-				}
-			} else {
-				for (int j = -2; (j < 0 ? (static_cast<unsigned int>(j) > maxColumn) : (static_cast<unsigned int>(j) < maxColumn)); j++) {
-					if (j == -2) {
-						debug << std::setw(3) << i;
-					} else if (j == -1) {
-						debug << '|';
+	for (int i = -4; (i < 0?(static_cast<unsigned int>(i) > maxRow): (static_cast<unsigned int>(i) < maxRow)); i++) {
+		if (i < -1) {
+			debugFile << "row ";
+			for (unsigned int j = 0; j < maxColumn; j++) {
+				debugFile << (j / static_cast<int>(pow(10,(abs(i) - 2)))) % 10;
+			}
+		} else if (i == -1) {
+			debugFile << "col";
+			for (unsigned int j = 0; j < maxColumn; j++) {
+				debugFile << '_';
+			}
+		} else {
+			for (int j = -2; (j < 0 ? (static_cast<unsigned int>(j) > maxColumn) : (static_cast<unsigned int>(j) < maxColumn)); j++) {
+				if (j == -2) {
+					debugFile << std::setw(3) << i;
+				} else if (j == -1) {
+					debugFile << '|';
+				} else {
+					if (mazeVector[i][j].isWall) {
+						debugFile << 'W';
+					} else if (mazeVector[i][j].isVisited) {
+						debugFile << mazeVector[i][j].pathID % 10;
 					} else {
-						if (mazeVector[i][j].isWall) {
-							debug << 'W';
-						} else if (mazeVector[i][j].isVisited) {
-							debug << mazeVector[i][j].pathID % 10;
-						} else {
-							debug << 'E';
-						}
+						debugFile << 'E';
 					}
 				}
 			}
-			debug << '\n';
 		}
-		debug.close();
+		debugFile << '\n';
 	}
+	debugFile.close();
 }
 
 void write_image() {
 
 	//Create new file
-	std::string newname = fileDefaultName;
-	newname.append(".result.bmp");
+	std::wstring newname = fileDefaultName;
+	newname.append(L".result.bmp");
 	std::ofstream result(newname, std::ios::out | std::ios::binary);
 
 	for (auto& iter : changedPos) { 
@@ -528,4 +536,116 @@ void write_image() {
 
 	result.seekp(0, std::ios::beg);
 	result.write(rawImageBlock, fileBinarySize);
+}
+
+enum PIXEL_TYPE
+{
+	PIXEL_SOLID = 0x2588,
+	PIXEL_THREEQUARTERS = 0x2593,
+	PIXEL_HALF = 0x2592,
+	PIXEL_QUARTER = 0x2591,
+};
+
+enum COLOUR
+{
+	FG_BLACK		= 0x0000,
+	FG_DARK_BLUE    = 0x0001,	
+	FG_DARK_GREEN   = 0x0002,
+	FG_DARK_CYAN    = 0x0003,
+	FG_DARK_RED     = 0x0004,
+	FG_DARK_MAGENTA = 0x0005,
+	FG_DARK_YELLOW  = 0x0006,
+	FG_GREY			= 0x0007, // Thanks MS :-/
+	FG_DARK_GREY    = 0x0008,
+	FG_BLUE			= 0x0009,
+	FG_GREEN		= 0x000A,
+	FG_CYAN			= 0x000B,
+	FG_RED			= 0x000C,
+	FG_MAGENTA		= 0x000D,
+	FG_YELLOW		= 0x000E,
+	FG_WHITE		= 0x000F,
+	BG_BLACK		= 0x0000,
+	BG_DARK_BLUE	= 0x0010,
+	BG_DARK_GREEN	= 0x0020,
+	BG_DARK_CYAN	= 0x0030,
+	BG_DARK_RED		= 0x0040,
+	BG_DARK_MAGENTA = 0x0050,
+	BG_DARK_YELLOW	= 0x0060,
+	BG_GREY			= 0x0070,
+	BG_DARK_GREY	= 0x0080,
+	BG_BLUE			= 0x0090,
+	BG_GREEN		= 0x00A0,
+	BG_CYAN			= 0x00B0,
+	BG_RED			= 0x00C0,
+	BG_MAGENTA		= 0x00D0,
+	BG_YELLOW		= 0x00E0,
+	BG_WHITE		= 0x00F0,
+};
+
+void write_console(const unsigned short maxColumn, const unsigned short maxRow) {
+	//Yes, I know the code looks like crap. Don't judge. I wrote this two  years ago (save for a couple changes here and there)
+	//Good thing is, it just works fine (except when the maze size is above 1000 in one dimension, in which case it just breaks down lol)
+
+	HANDLE newConsoleHandle = GetStdHandle(STD_OUTPUT_HANDLE);
+	SMALL_RECT rectConsole = { 0, 0, static_cast<short>(maxColumn), static_cast<short>(maxRow) };
+	SetConsoleWindowInfo(newConsoleHandle, true, &rectConsole);
+	COORD coordConsole = { static_cast<short>(maxColumn), static_cast<short>(maxRow) };
+	if (!SetConsoleScreenBufferSize(newConsoleHandle, coordConsole)) {
+		std::wcerr << L"ERROR IN SetConsoleScreenBufferSize";
+	}
+	if (!SetConsoleActiveScreenBuffer(newConsoleHandle)) {
+		std::wcerr << L"ERROR IN SetConsoleActiveScreenBuffer";
+	}
+	CONSOLE_FONT_INFOEX cfi;
+	cfi.cbSize = sizeof(cfi);
+	cfi.nFont = 0;
+	cfi.dwFontSize.X = 3;
+	cfi.dwFontSize.Y = 3;
+	cfi.FontFamily = FF_DONTCARE;
+	cfi.FontWeight = FW_NORMAL;
+	wcscpy_s(cfi.FaceName, L"Consolas");
+	if (!SetCurrentConsoleFontEx(newConsoleHandle, false, &cfi)) {
+		std::wcerr << L"SetCurrentConsoleFontEx";
+	}
+	CONSOLE_SCREEN_BUFFER_INFO csbi;
+	if (!GetConsoleScreenBufferInfo(newConsoleHandle, &csbi))
+		std::wcerr << L"GetConsoleScreenBufferInfo";
+	if (static_cast<signed int>(maxColumn) > csbi.dwMaximumWindowSize.Y)
+		std::wcerr << L"Screen Height / Font Height Too Big";
+	if (static_cast<signed int>(maxRow) > csbi.dwMaximumWindowSize.X)
+		std::wcerr << "Screen Width / Font Width Too Big";
+	rectConsole = { 0, 0, (short)maxRow - 1, (short)maxColumn - 1 };
+	if (!SetConsoleWindowInfo(newConsoleHandle, TRUE, &rectConsole))
+		std::wcerr << L"SetConsoleWindowInfo";
+	auto* bufferConsole = new CHAR_INFO[maxRow * maxColumn];
+	memset(bufferConsole, 0, sizeof(CHAR_INFO) * maxRow * maxColumn);
+
+	while (true) {
+
+		for (int x = 0; static_cast<unsigned int>(x) < maxRow; x++) {
+			for (int y = 0; static_cast<unsigned int>(y) < maxColumn; y++) {
+				if (mazeVector[y][x].isWall) {
+					bufferConsole[y * maxRow + x].Char.UnicodeChar = PIXEL_QUARTER;
+					bufferConsole[y * maxRow + x].Attributes = FG_WHITE | BG_GREY;
+				} else if (mazeVector[y][x].isVisited) {
+					bufferConsole[y * maxRow + x].Char.UnicodeChar = PIXEL_SOLID;
+					bufferConsole[y * maxRow + x].Attributes = (mazeVector[y][x].pathID % 14) + 1;
+				} else {
+					bufferConsole[y * maxRow + x].Char.UnicodeChar = PIXEL_QUARTER;
+					bufferConsole[y * maxRow + x].Attributes = FG_GREY | BG_BLACK;
+				}
+			}
+		}
+		WriteConsoleOutput(newConsoleHandle, bufferConsole, { (short)maxColumn, (short)maxRow }, { 0,0 }, &rectConsole);
+		
+		switch (int c = _getch()) {
+			case 102:
+				write_debug();
+		}
+		_getch();
+
+		isDebugComplete.notify_all();
+	}
+
+
 }

@@ -1,17 +1,18 @@
 #include "pch.h"
 
 #include <iostream>
-#include <iomanip>
-#include <fstream>
-#include <cstdlib>
 #include <conio.h>
 #include <vector>
 #include <ctime>
+#include <algorithm>
+#include <stdexcept>
 
-//include for debugging
-//comment out for production
+/* include for debugging, comment out for production */
 //#define IS_DEBUGGING
 
+#ifdef IS_DEBUGGING
+#include <fstream>
+#endif
 
 enum callerTypes {
 	CORRER_CASILLAS = 0b0100,
@@ -53,8 +54,10 @@ class DibujarFunciones {
 	
 		bool columnaEsCero(int columna, int pos1, int pos2) const;
 		bool filaEsCero(int fila, int pos1, int pos2) const;
-	
+
 		void setDebugInterface(DibujarDebug* debug_param);
+
+		int score;
 	
 	
 		DibujarDebug* debug;
@@ -78,25 +81,23 @@ class DibujarDebug {
 };
 #endif
 
+extern "C" int _setenvp {};
 
+bool isNewGame;
 
-int main(int argc, char **argv) {
+int wmain(int argc, char **argv) {
 	int altura;
-	//std::string entrada;
 	
 	int charEntrada;
 
-	if (argc == 2 && atoi(argv[1]) != 0)
+	if (argc == 2 && atoi(argv[1]) != 0) {
 		altura = atoi(argv[1]);
-	else
+	} else {
 		altura = 4;
+	}
 
-	bool isExit = false;
-	bool isNewGame;
-	bool entryIsGood;
-
-	while (!isExit) {
-		DibujarFunciones *Dibujar1 = new DibujarFunciones(altura);
+	while (true) {
+		auto *Dibujar1 = new DibujarFunciones(altura);
 
 		//Para debugear
 		#ifdef IS_DEBUGGING
@@ -107,45 +108,45 @@ int main(int argc, char **argv) {
 		while (!isNewGame) {
 			Dibujar1->nuevaCasilla();
 			Dibujar1->dibujarCasillas();
-			std::cout << std::endl << std::endl << "Siguiente movimiento: (flechas para moverse, N para nuevo juego, Esc para salir)";
+			wprintf(L"\n\nSiguiente movimiento: (flechas para moverse, N para nuevo juego, Esc para salir)");
 
-			entryIsGood = false;
+			bool entryIsGood = false;
 			while (!entryIsGood) {
 				charEntrada = _getch();
-				if (charEntrada == 0xE0) {
-					charEntrada = _getch();
-					switch (charEntrada) {
-						case 72:
-							Dibujar1->correrMatriz(1);
-							entryIsGood = true;
-							break;
-						case 80:
-							Dibujar1->correrMatriz(2);
-							entryIsGood = true;
-							break;
-						case 75:
-							Dibujar1->correrMatriz(3);
-							entryIsGood = true;
-							break;
-						case 77:
-							Dibujar1->correrMatriz(4);
-							entryIsGood = true;
-							break;
-						default:
-							std::cout << "Comando invalido" << std::endl << std::endl << "Siguiente movimiento: ";
-					}
-				} else {
-					switch (charEntrada) {
-						case 110:
-							entryIsGood = true;
-							isNewGame = true;
-							break;
-						case 27:
-							entryIsGood = true;
-							isNewGame = true;
-							isExit = true;
-							break;
-					}
+				switch (charEntrada) {
+					case 110:
+						entryIsGood = true;
+						isNewGame = true;
+						break;
+					case 27:
+						#ifdef IS_DEBUGGING
+						delete Debug;
+						#endif
+						delete Dibujar1;
+						return 0;
+					case 0xE0:
+						charEntrada = _getch();
+						switch (charEntrada) {
+							case 72:
+								Dibujar1->correrMatriz(1);
+								entryIsGood = true;
+								break;
+							case 80:
+								Dibujar1->correrMatriz(2);
+								entryIsGood = true;
+								break;
+							case 75:
+								Dibujar1->correrMatriz(3);
+								entryIsGood = true;
+								break;
+							case 77:
+								Dibujar1->correrMatriz(4);
+								entryIsGood = true;
+								break;
+							default:
+								wprintf(L"Comando invalido\n\nSiguiente movimiento: ");
+						}
+						break;
 				}
 				
 			}
@@ -168,35 +169,38 @@ int main(int argc, char **argv) {
 //____________________________________________________________________________________
 
 //constructor: declara la constante max_altura e inicializa la matriz
-DibujarFunciones::DibujarFunciones(int altura) : max_altura(altura) {
+DibujarFunciones::DibujarFunciones(int altura) : max_altura(altura), score(0) {
 	debug = nullptr;
 	matriz.resize(max_altura*max_altura);
 }
 
 //devuelve el valor de la matriz, con verificacion de coordenadas
 int DibujarFunciones::getCasillas(int x, int y) const {
-	if (x >= max_altura || y >= max_altura || x < 0 || y < 0)
+	if (x >= max_altura || y >= max_altura || x < 0 || y < 0) {
 		return 0;
-	else
+	} else {
 		return matriz[y*max_altura + x];
+	}
 }
 
 //cambia un valor de la matriz, con verificacion de coordenadas
 void DibujarFunciones::setCasillas(int x, int y, int valor, int caller) {
-	if (x < max_altura || y < max_altura){
-		matriz[x + y * max_altura] = valor;
-	} else {
+	try {
+		matriz.at(x + y * max_altura) = valor;
+	} catch (std::out_of_range &e) {
 		#ifdef IS_DEBUGGING
 		debug->writeError(BAD_SETCASILLAS, caller, x, y);
 		#endif
+		std::wcerr << L"ERROR -- " << e.what() << L"\nBad vector coordinate: (" << x << L", " << y << L")";
+		std::system("pause");
+		exit;
 	}
-	return;
 }
 
 //mete un 1 o un 2 al azar en un espacio vacio de la matriz
 void DibujarFunciones::nuevaCasilla() {
 	int x, y;
-	srand(static_cast<unsigned int>(time(NULL)));
+	srand(static_cast<unsigned int>(time(nullptr)));
 	do {
 		x = rand() % max_altura;
 		y = rand() % max_altura;
@@ -253,10 +257,14 @@ void DibujarFunciones::correrMatriz(int direccion) {
 		}
 		break;
 	default:
-		std::cerr << "correrMatriz: parametro no valido";
+		std::wcerr << L"correrMatriz: parametro no valido";
 		break;
 	}
-	return;
+	if (!std::any_of(matriz.begin(), matriz.end(), [] (int x) { return x == 0; })) {
+		isNewGame = true;
+		wprintf(L"\n\nGAME OVER!\nPress N to start new game or");
+		while (_getch() != 110) {};
+	}
 }
 
 
@@ -283,7 +291,6 @@ void DibujarFunciones::correrColumnaVertical(int columna, int direccion) {
 	#ifdef IS_DEBUGGING
 	debug->writeDebug(1, columna);
 	#endif
-	return;
 }
 
 //suma una columna vertical
@@ -294,16 +301,15 @@ void DibujarFunciones::sumarColumnaVertical(int columna, int direccion) {
 	for (int i = start; i >= (direccion == 1 ? 0 : 1) && i < (direccion == 1 ? max_altura - 1 : max_altura); i += direccion) {
 		if (getCasillas(columna, i) == getCasillas(columna, i + direccion)) {
 			setCasillas(columna, i, getCasillas(columna, i) * 2, SUMAR_CASILLAS | (direccion == 1 ? INC_CASILLAS : DEC_CASILLAS) | VER_CASILLAS);
+			score += getCasillas(columna, i);
 			i += direccion;
-			setCasillas(columna, i, 0, SUMAR_CASILLAS | (direccion == 1 ? INC_CASILLAS : DEC_CASILLAS) | VER_CASILLAS);
+			setCasillas(columna, i, 0, SUMAR_CASILLAS | (direccion == 1 ? INC_CASILLAS : DEC_CASILLAS) | VER_CASILLAS);	
 		}
 	}
 
 	#ifdef IS_DEBUGGING
 	debug->writeDebug(2, columna);
 	#endif
-
-	return;
 }
 
 
@@ -329,7 +335,6 @@ void DibujarFunciones::correrFilaHorizontal(int fila, int direccion) {
 	#ifdef IS_DEBUGGING
 	debug->writeDebug(1, fila);
 	#endif
-	return;
 }
 
 void DibujarFunciones::sumarFilaHorizontal(int fila, int direccion) {
@@ -339,6 +344,7 @@ void DibujarFunciones::sumarFilaHorizontal(int fila, int direccion) {
 	for (int i = start; i >= (direccion == 1 ? 0 : 1) && i < (direccion == 1 ? max_altura - 1 : max_altura); i += direccion) {
 		if (getCasillas(i, fila) == getCasillas(i + direccion, fila)) {
 			setCasillas(i, fila, getCasillas(i, fila) * 2, SUMAR_CASILLAS | (direccion == 1 ? INC_CASILLAS : DEC_CASILLAS) | HOR_CASILLAS);
+			score += getCasillas(i, fila);
 			i += direccion;
 			setCasillas(i, fila, 0, SUMAR_CASILLAS | (direccion == 1 ? INC_CASILLAS : DEC_CASILLAS) | HOR_CASILLAS);
 		}
@@ -346,8 +352,6 @@ void DibujarFunciones::sumarFilaHorizontal(int fila, int direccion) {
 	#ifdef IS_DEBUGGING
 	debug->writeDebug(2, fila);
 	#endif
-
-	return;
 }
 
 
@@ -372,40 +376,41 @@ bool DibujarFunciones::filaEsCero(int fila, int pos1, int pos2) const {
 
 
 void DibujarFunciones::dibujarCasillas() {
+	wprintf(L"Score: %d\n", score);
 	//Dibuja la linea de arriba de la matriz 
 	for (int j = 0; j < max_altura; j++) {
-		std::cout << "_____________";
+		wprintf(L"_____________");
 	}
 
 	//Dibuja el resto de la matriz
 	for (int i = 0; i < max_altura; i++) {
 		for (int k = 0; k <= 1; k++) {
-			std::cout << std::endl << "|";
+			wprintf(L"\n|");
 			for (int j = 0; j < max_altura; j++) {
-				std::cout << "            |";
+				wprintf(L"            |");
 			}
 		}
 
-		std::cout << std::endl << "|";
+		wprintf(L"\n|");
 		for (int j = 0; j < max_altura; j++) {
 			if (getCasillas(j, i) != 0) {
-				std::cout << "    " << std::setw(4) << getCasillas(j, i) << "    |";
+				wprintf(L"    %4d    |", getCasillas(j, i));
 			}
 			else {
-				std::cout << "            |";
+				wprintf(L"            |");
 			}
 		}
 
 		for (int i = 0; i <= 0; i++) {
-			std::cout << std::endl << "|";
+			wprintf(L"\n|");
 			for (int j = 0; j < max_altura; j++) {
-				std::cout << "            |";
+				wprintf(L"            |");
 			}
 		}
 
-		std::cout << std::endl << "|";
+		wprintf(L"\n|");
 		for (int j = 0; j < max_altura; j++) {
-			std::cout << "____________|";
+			wprintf(L"____________|");
 		}
 	}
 }
@@ -413,7 +418,6 @@ void DibujarFunciones::dibujarCasillas() {
 void DibujarFunciones::setDebugInterface(DibujarDebug* debug_param) {
 	debug = debug_param;
 }
-
 
 #ifdef IS_DEBUGGING
 //____________________________________________________________________________________
