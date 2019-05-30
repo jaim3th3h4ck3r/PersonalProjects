@@ -171,7 +171,7 @@ int wmain(int argc, char **argv) {
 //constructor: declara la constante max_altura e inicializa la matriz
 DibujarFunciones::DibujarFunciones(int altura) : max_altura(altura), score(0) {
 	debug = nullptr;
-	matriz.resize(max_altura*max_altura);
+	matriz.resize(max_altura * max_altura);
 }
 
 //devuelve el valor de la matriz, con verificacion de coordenadas
@@ -179,7 +179,7 @@ int DibujarFunciones::getCasillas(int x, int y) const {
 	if (x >= max_altura || y >= max_altura || x < 0 || y < 0) {
 		return 0;
 	} else {
-		return matriz[y*max_altura + x];
+		return matriz[y * max_altura + x];
 	}
 }
 
