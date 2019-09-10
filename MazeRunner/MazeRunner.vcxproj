@@ -152,6 +152,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="pch.h" />
+    <ClInclude Include="Writers.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="MazeRunner.cpp" />
