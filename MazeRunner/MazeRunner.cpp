@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 #include <deque>
+#include <bitset>
 
 #include <chrono>
 #include <thread>
@@ -51,13 +52,10 @@ int fileBinarySize;
 std::vector<std::pair <unsigned int, unsigned int>> changedPos;
 //String for error throwing
 std::string errorString;
-//Mutex and condition variable
-std::mutex debug;
-std::condition_variable isDebugComplete;
 
 
 //Size of maze pixels to navigate
-unsigned int mazeNumberRows, mazeNumberColumns;
+std::pair <unsigned int, unsigned int> mazeNumber;
 
 //2D vector, used for positioning
 //Global because writing functions use it for writing data
@@ -71,24 +69,21 @@ std::vector <bool> isPathIDDeadEnd{ true };
 
 //Function for checking whether a certain coordinate is within the specified limits of the maze
 bool isCoordValid(unsigned int firstCoord, unsigned int secondCoord) {
-	return firstCoord < static_cast<signed int>(mazeNumberColumns) && secondCoord < static_cast<signed int>(mazeNumberRows);
+	return firstCoord < static_cast<signed int>(mazeNumber.first) && secondCoord < static_cast<signed int>(mazeNumber.second);
+}
+bool isCoordValid(std::pair <unsigned int, unsigned int> pair) {
+	return pair.first < static_cast<signed int>(mazeNumber.first) && pair.second < static_cast<signed int>(mazeNumber.second);
 }
 
 
-/*CHILD FUNCTIONS*/
-//writes vector array data to diagnostic .txt file
-void write_debug(unsigned int maxColumn = 256, unsigned int maxRow = 256);
-//writes vector array to final pretty .bmp image
-void write_image();
-//Writes vector to second console
-void write_console(const unsigned short maxColumn, const unsigned short maxRow);
+// Writing functions
 #include "Writers.h"
 
 
 
 int wmain(int argc, wchar_t** argv){
 	//Image loading block
-	//It's in brackets because I don't wanna see it while editing the solving loop :P
+	//It's in a block because I don't wanna see it while editing the solving loop :P
 	{
 		char* rawImagePointer;
 
@@ -139,31 +134,31 @@ int wmain(int argc, wchar_t** argv){
 
 		//Read the number of horizontal pixels from header, 18 bytes from start of file
 		rawImagePointer = rawImageBlock + 18;
-		mazeNumberRows = 256 + static_cast<unsigned int> (*(rawImagePointer));
+		mazeNumber.first = 256 + static_cast<unsigned int> (*(rawImagePointer));
 
 		//Read the number of vertical pixels from header, 22 bytes from start of file
 		rawImagePointer = rawImageBlock + 22;
-		mazeNumberColumns = 256 + static_cast<unsigned int>(*(rawImagePointer));
+		mazeNumber.second = 256 + static_cast<unsigned int>(*(rawImagePointer));
 
 		//Parse memblock into int vector array
 		rawImagePointer = rawImageBlock + static_cast<int>(*(rawImageBlock + 10));					//Set pointer to start of image data
-		rawPadding = (3 * mazeNumberRows) % 4;
+		rawPadding = (3 * mazeNumber.first) % 4;
 
 		//Resize coor to match maze dimensions
 		try {
-			mazeVector.resize(mazeNumberColumns);
+			mazeVector.resize(mazeNumber.second);
 
 			//Vector-writing loops
 			//Row loop = y-coordinate
-			for (unsigned int a = 0; a < mazeNumberColumns; a++) {
+			for (unsigned int a = 0; a < mazeNumber.second; a++) {
 
-				mazeVector[a].reserve(mazeNumberRows);
+				mazeVector[a].reserve(mazeNumber.first);
 
 				//Column loop = x-coordinate
-				for (unsigned int b = 0; b < mazeNumberRows; b++) {
+				for (unsigned int b = 0; b < mazeNumber.first; b++) {
 
 					//Location of data in order
-					int rawOffset = a * mazeNumberRows + b;
+					int rawOffset = a * mazeNumber.first + b;
 					if (*(rawImagePointer + (3 * rawOffset) + (a * rawPadding)) == 0) {
 						mazeVector[a].emplace_back(true);
 					} else {
@@ -178,8 +173,10 @@ int wmain(int argc, wchar_t** argv){
 
 		//Write image as a test
 		write_image();
-		write_debug(mazeNumberColumns, mazeNumberRows);
 	}
+
+	//Set up the console
+	cmd_console console(mazeNumber);
 
 	// 2D vector complete
 	// Start solving algorithm
@@ -200,16 +197,15 @@ int wmain(int argc, wchar_t** argv){
 
 	//True if maze is solved
 	bool isFinished = false;
-	//???
-	bool hasNeighborPos, hasNeighborNeg;
-	//???
-	bool hasNeighborNormal;
+	//Vector for checking whether a certain coordinate has a neighbor
+	//Use the bitmask enum for direction (UP, DOWN, LEFT, RIGHT)
+	std::bitset <4> hasNeighbor;
 	//Direction of the "wave", implemented using bitmask
 	unsigned int DIR = 0;
 	//How many coordinates on the currentCoord vector
 	unsigned int iterations;
 	//When checking each coordinate on currentCoord, a subloop checks the adjacent coordinates. This is the coordinate of the adjacent coordinate
-	std::pair <unsigned int, unsigned int> loopCoord;
+	std::pair <unsigned int, unsigned int> adjacentCoord;
 	//Vector with all coordinates we're checking now; new ones are added to newCoord
 	std::vector < std::pair <unsigned short, unsigned short> > currentCoord;
 	std::vector < std::pair <unsigned short, unsigned short> > newCoord;
@@ -222,7 +218,7 @@ int wmain(int argc, wchar_t** argv){
 	std::chrono::steady_clock::time_point solveTimeBegin = std::chrono::steady_clock::now();
 
 	//Tries to find an entry point on the upper and left edges of the image
-	for (unsigned short x = 0, y = 0; x < mazeNumberRows - 1 || y < mazeNumberColumns - 1;) {
+	for (unsigned short x = 0, y = 0; x < mazeNumber.first - 1 || y < mazeNumber.second - 1;) {
 		if (!mazeVector[x][0].isWall) {
 			currentCoord.emplace_back(x, 0);
 			mazeVector[x][0].direction = ALL_DIR;
@@ -238,16 +234,13 @@ int wmain(int argc, wchar_t** argv){
 			y = 0xFFFF;
 		}
 
-		if (x < mazeNumberRows - 1) {
+		if (x < mazeNumber.first - 1) {
 			x++;
 		}
-		if (y < mazeNumberColumns - 1) {
+		if (y < mazeNumber.second - 1) {
 			y++;
 		}
 	}
-
-	std::thread printDebug (write_console, mazeNumberColumns, mazeNumberRows);
-	printDebug.detach();
 
 	try{
 
@@ -256,9 +249,9 @@ int wmain(int argc, wchar_t** argv){
 		//Main solving loop
 		while (!isFinished) {
 
-			std::unique_lock<std::mutex> lock(debug);
-			isDebugComplete.wait(lock);
-
+			//Write console then wait for input to advance
+			console.write_console();
+			//void) _getch();
 
 			if (!newCoord.empty()) {
 				currentCoord.swap(newCoord);
@@ -273,20 +266,23 @@ int wmain(int argc, wchar_t** argv){
 				recoveryPoint.pop_front();
 			}
 
-			iterations = currentCoord.size();
+			iterations = static_cast <unsigned int> (currentCoord.size());
 
-			hasNeighborNormal = false;
+			//Runs for each of the coordinates in currentCoord,
+			//loopCoord is the coordinate the loop is checking
+			for (auto& loopCoord : currentCoord) {
 
-			//Runs for each of the coordinates in currentCoord
-			for (auto& iter : currentCoord) {
-
-				hasNeighborPos = false;
-				hasNeighborNeg = false;
+				hasNeighbor[UP] = false;
+				hasNeighbor[DOWN] = false;
+				hasNeighbor[LEFT] = false;
+				hasNeighbor[RIGHT] = false;
 
 				DIR = 0;
 
 				//Runs four times for each coordinate, one for each direction
 				for (int j = 4; j > 0; j--) {
+
+					console.write_console();
 
 					//Conditional DIR assignment
 					//After every normal loop iteration DIR is reset to 0
@@ -294,23 +290,23 @@ int wmain(int argc, wchar_t** argv){
 						DIR = 1 << (j - 1);
 					}
 
-					//Sets which neighboring tile to check based on the iter tile, which is gathered from the currentCoord vector
+					//Sets which neighboring tile to check based on the loopCoord tile, which is gathered from the currentCoord vector
 					switch (DIR) {
 						case UP:
-							loopCoord.first = iter.first - 1;
-							loopCoord.second = iter.second;
+							adjacentCoord.first = loopCoord.first - 1;
+							adjacentCoord.second = loopCoord.second;
 							break;
 						case DOWN:
-							loopCoord.first = iter.first + 1;
-							loopCoord.second = iter.second;
+							adjacentCoord.first = loopCoord.first + 1;
+							adjacentCoord.second = loopCoord.second;
 							break;
 						case LEFT:
-							loopCoord.first = iter.first;
-							loopCoord.second = iter.second - 1;
+							adjacentCoord.first = loopCoord.first;
+							adjacentCoord.second = loopCoord.second - 1;
 							break;
 						case RIGHT:
-							loopCoord.first = iter.first;
-							loopCoord.second = iter.second + 1;
+							adjacentCoord.first = loopCoord.first;
+							adjacentCoord.second = loopCoord.second + 1;
 							break;
 						default:
 							errorString = "Bad DIR value: " + std::to_string(DIR) + "\n4D travel not allowed";
@@ -319,31 +315,31 @@ int wmain(int argc, wchar_t** argv){
 
 
 					//Protection -- checks for invalid vector coordinates (above image pixels), throws an exception if one of them is
-					if (!isCoordValid(loopCoord.first,loopCoord.second)) {
-						errorString = "Bad maze coordinates: (" + std::to_string(loopCoord.first) + ", " + std::to_string(loopCoord.second) + ")\nRemember: The Minotaur must not escape. Do not undermine our efforts.";
+					if (!isCoordValid(adjacentCoord)) {
+						errorString = "Bad maze coordinates: (" + std::to_string(adjacentCoord.first) + ", " + std::to_string(adjacentCoord.second) + ")\nRemember: The Minotaur must not escape. Do not undermine our efforts.";
 						throw std::out_of_range(errorString);
 					}
 					
 
-					if (loopCoord.first >= static_cast<signed int>(0) && loopCoord.second >= static_cast<signed int>(0)) {
+					if (adjacentCoord.first >= static_cast<signed int>(0) && adjacentCoord.second >= static_cast<signed int>(0)) {
 
 						//Checks if wall is hit
-						if ((mazeVector[loopCoord.first][loopCoord.second].isWall) && (mazeVector[iter.first][iter.second].direction & DIR) == DIR) {
+						if ((mazeVector[adjacentCoord.first][adjacentCoord.second].isWall) && (mazeVector[loopCoord.first][loopCoord.second].direction & DIR) == DIR) {
 
 							if ((DIR & VERTICAL) != 0) {
-								if (iter.second < mazeNumberRows - 1 && !mazeVector[iter.first][iter.second + 1].isWall) {
-									mazeVector[iter.first][iter.second + 1].isVisited = true;
-									mazeVector[iter.first][iter.second + 1].direction = RIGHT;
+								if (loopCoord.second < mazeNumber.first - 1 && !mazeVector[loopCoord.first][loopCoord.second + 1].isWall) {
+									mazeVector[loopCoord.first][loopCoord.second + 1].isVisited = true;
+									mazeVector[loopCoord.first][loopCoord.second + 1].direction = RIGHT;
 									isPathIDDeadEnd.emplace_back(false);
-									mazeVector[iter.first][iter.second + 1].pathID = static_cast<unsigned short>(isPathIDDeadEnd.size() - 1);
+									mazeVector[loopCoord.first][loopCoord.second + 1].pathID = static_cast<unsigned short>(isPathIDDeadEnd.size() - 1);
 									hasNeighborPos = true;
 
 								}
-								  if (iter.second > 0 && !mazeVector[iter.first][iter.second - 1].isWall) {
-									mazeVector[iter.first][iter.second - 1].isVisited = true;
-									mazeVector[iter.first][iter.second - 1].direction = LEFT;
+								if (loopCoord.second > 0 && !mazeVector[loopCoord.first][loopCoord.second - 1].isWall) {
+									mazeVector[loopCoord.first][loopCoord.second - 1].isVisited = true;
+									mazeVector[loopCoord.first][loopCoord.second - 1].direction = LEFT;
 									isPathIDDeadEnd.emplace_back(false);
-									mazeVector[iter.first][iter.second - 1].pathID = static_cast<unsigned short>(isPathIDDeadEnd.size() - 1);
+									mazeVector[loopCoord.first][loopCoord.second - 1].pathID = static_cast<unsigned short>(isPathIDDeadEnd.size() - 1);
 									hasNeighborNeg = true;
 								}
 
@@ -351,29 +347,29 @@ int wmain(int argc, wchar_t** argv){
 								//Only one is loaded into currentCoord; if both upper and lower exist,
 								//lower is instead loaded into recoveryPoint
 								newCoord.clear();
-								if (hasNeighborNeg && hasNeighborPos) {
-									newCoord.emplace_back(iter.first, iter.second + 1);
-									recoveryPoint.emplace_front(iter.first, iter.second - 1);
-								} else if (hasNeighborPos) {
-									newCoord.emplace_back(iter.first, iter.second + 1);
-								} else if (hasNeighborNeg) {
-									newCoord.emplace_back(iter.first, iter.second - 1);
+								if (hasNeighbor[UP] && hasNeighbor[DOWN]) {
+									newCoord.emplace_back(loopCoord.first, loopCoord.second + 1);
+									recoveryPoint.emplace_front(loopCoord.first, loopCoord.second - 1);
+								} else if (hasNeighbor[UP]) {
+									newCoord.emplace_back(loopCoord.first, loopCoord.second + 1);
+								} else if (hasNeighbor[DOWN]) {
+									newCoord.emplace_back(loopCoord.first, loopCoord.second - 1);
 								}
 
 							} else if ((DIR & HORIZONTAL) != 0) {
-								if (iter.first < mazeNumberColumns - 1 && !mazeVector[iter.first + 1][iter.second].isWall) {
-									mazeVector[iter.first + 1][iter.second].isVisited = true;
-									mazeVector[iter.first + 1][iter.second].direction = DOWN;
+								if (loopCoord.first < mazeNumber.second - 1 && !mazeVector[loopCoord.first + 1][loopCoord.second].isWall) {
+									mazeVector[loopCoord.first + 1][loopCoord.second].isVisited = true;
+									mazeVector[loopCoord.first + 1][loopCoord.second].direction = DOWN;
 									isPathIDDeadEnd.emplace_back(false);
-									mazeVector[iter.first + 1][iter.second].pathID = static_cast<unsigned short>(isPathIDDeadEnd.size() - 1);
+									mazeVector[loopCoord.first + 1][loopCoord.second].pathID = static_cast<unsigned short>(isPathIDDeadEnd.size() - 1);
 									hasNeighborPos = true;
 
 								}
-								if (iter.first > 0 && !mazeVector[iter.first - 1][iter.second].isWall) {
-									mazeVector[iter.first - 1][iter.second].isVisited = true;
-									mazeVector[iter.first - 1][iter.second].direction = UP;
+								if (loopCoord.first > 0 && !mazeVector[loopCoord.first - 1][loopCoord.second].isWall) {
+									mazeVector[loopCoord.first - 1][loopCoord.second].isVisited = true;
+									mazeVector[loopCoord.first - 1][loopCoord.second].direction = UP;
 									isPathIDDeadEnd.emplace_back(false);
-									mazeVector[iter.first - 1][iter.second].pathID = static_cast<unsigned short>(isPathIDDeadEnd.size() - 1);
+									mazeVector[loopCoord.first - 1][loopCoord.second].pathID = static_cast<unsigned short>(isPathIDDeadEnd.size() - 1);
 									hasNeighborNeg = true;
 								}
 
@@ -382,21 +378,21 @@ int wmain(int argc, wchar_t** argv){
 								//lower is instead loaded into recoveryPoint
 								newCoord.clear();
 								if (hasNeighborNeg && hasNeighborPos) {
-									newCoord.emplace_back(iter.first + 1, iter.second);
-									recoveryPoint.emplace_front(iter.first - 1, iter.second);
+									newCoord.emplace_back(loopCoord.first + 1, loopCoord.second);
+									recoveryPoint.emplace_front(loopCoord.first - 1, loopCoord.second);
 								} else if (hasNeighborPos) {
-									newCoord.emplace_back(iter.first + 1, iter.second);
+									newCoord.emplace_back(loopCoord.first + 1, loopCoord.second);
 								} else if (hasNeighborNeg) {
-									newCoord.emplace_back(iter.first - 1, iter.second);
+									newCoord.emplace_back(loopCoord.first - 1, loopCoord.second);
 								}
 							}
 
-							changedPos.emplace_back(iter.first, iter.second);
+							changedPos.emplace_back(loopCoord.first, loopCoord.second);
 
 							//Special routine: if the point we're checking doesn't have neighbors, sets that pathID as a dead end.
 							//then clears the vectors and writes the new coordinate to newCoord
 							if (!(hasNeighborPos || hasNeighborNeg)) {
-								isPathIDDeadEnd[mazeVector[iter.first][iter.second].pathID] = true;
+								isPathIDDeadEnd[mazeVector[loopCoord.first][loopCoord.second].pathID] = true;
 								currentCoord.clear();
 								newCoord.clear();
 								newCoord.push_back(recoveryPoint.front());
@@ -414,14 +410,14 @@ int wmain(int argc, wchar_t** argv){
 
 							//Now checks if vector below is visited IF AND ONLY IF it did not hit a wall (wall-specific routine below)
 							//If it is, it pushes it onto the currentCoord vector, then edits its properties
-						} else if (!(mazeVector[loopCoord.first][loopCoord.second].isVisited)) {
-							newCoord.emplace_back(loopCoord.first, loopCoord.second);
-							mazeVector[loopCoord.first][loopCoord.second].isVisited = true;
-							mazeVector[loopCoord.first][loopCoord.second].pathID 
-								= mazeVector[iter.first][iter.second].pathID;
-							mazeVector[loopCoord.first][loopCoord.second].direction = static_cast<unsigned char>(DIR);
+						} else if (!(mazeVector[adjacentCoord.first][adjacentCoord.second].isVisited)) {
+							newCoord.emplace_back(adjacentCoord.first, adjacentCoord.second);
+							mazeVector[adjacentCoord.first][adjacentCoord.second].isVisited = true;
+							mazeVector[adjacentCoord.first][adjacentCoord.second].pathID 
+								= mazeVector[loopCoord.first][loopCoord.second].pathID;
+							mazeVector[adjacentCoord.first][adjacentCoord.second].direction = static_cast<unsigned char>(DIR);
 
-							changedPos.emplace_back(loopCoord.first, loopCoord.second);
+							changedPos.emplace_back(adjacentCoord.first, adjacentCoord.second);
 
 							DIR = 0;
 							hasNeighborNormal = true;
@@ -442,7 +438,7 @@ int wmain(int argc, wchar_t** argv){
 				//Special routine: if the point we're checking doesn't have neighbors, sets that pathID as a dead end.
 				//then clears the vectors and writes the new coordinate to newCoord
 				if (!hasNeighborNormal && !recoveryPoint.empty()) {
-					isPathIDDeadEnd[mazeVector[iter.first][iter.second].pathID] = true;
+					isPathIDDeadEnd[mazeVector[loopCoord.first][loopCoord.second].pathID] = true;
 					currentCoord.clear();
 					newCoord.clear();
 					newCoord.push_back(recoveryPoint.front());
@@ -452,7 +448,7 @@ int wmain(int argc, wchar_t** argv){
 				}
 
 				//Checks for finished status: if the coordinate either below or to the right is the size of the maze, that is the exit
-				if (iter.first >= mazeNumberRows - 1 || iter.second >= mazeNumberColumns - 1) {
+				if (loopCoord.first >= mazeNumber.first - 1 || loopCoord.second >= mazeNumber.second - 1) {
 					isFinished = true;
 					break;
 				}
@@ -460,6 +456,7 @@ int wmain(int argc, wchar_t** argv){
 			}
 
 		}
+		
 		std::chrono::steady_clock::time_point solveTimeEnd = std::chrono::steady_clock::now();
 		std::chrono::duration<long int, std::milli> solveTime = std::chrono::duration_cast<std::chrono::duration<long int, std::milli>>(solveTimeEnd - solveTimeBegin);
 
@@ -470,7 +467,7 @@ int wmain(int argc, wchar_t** argv){
 	} catch (const std::length_error &e) {
 		std::cerr << std::endl << "ERROR: " << e.what() << std::endl << "Exiting program...\n";
 	}
-
+	
 	write_image();
 
 	std::system("pause");

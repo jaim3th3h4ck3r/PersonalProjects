@@ -1,50 +1,9 @@
 #pragma once
 
 /* 
-File with all external writing functions separate
-Keep the main MazeRunner.cpp file neater
+File with all external writing functions separate to keep the main MazeRunner.cpp file neater
 */
 
-void write_debug(const unsigned int maxColumn, const unsigned int maxRow) {
-	//Yes, I know the code looks like crap. Don't judge. I wrote this two  years ago (save for a couple changes here and there)
-	//Good thing is, it just works fine (except when the maze size is above 1000 in one dimension, in which case it just breaks down lol)
-
-	std::ofstream debugFile;
-
-	debugFile.open("debug.log", std::ios::out | std::ios::trunc | std::ios::beg);
-
-	for (int i = -4; (i < 0?(static_cast<unsigned int>(i) > maxRow): (static_cast<unsigned int>(i) < maxRow)); i++) {
-		if (i < -1) {
-			debugFile << "row ";
-			for (unsigned int j = 0; j < maxColumn; j++) {
-				debugFile << (j / static_cast<int>(pow(10,(abs(i) - 2)))) % 10;
-			}
-		} else if (i == -1) {
-			debugFile << "col";
-			for (unsigned int j = 0; j < maxColumn; j++) {
-				debugFile << '_';
-			}
-		} else {
-			for (int j = -2; (j < 0 ? (static_cast<unsigned int>(j) > maxColumn) : (static_cast<unsigned int>(j) < maxColumn)); j++) {
-				if (j == -2) {
-					debugFile << std::setw(3) << i;
-				} else if (j == -1) {
-					debugFile << '|';
-				} else {
-					if (mazeVector[i][j].isWall) {
-						debugFile << 'W';
-					} else if (mazeVector[i][j].isVisited) {
-						debugFile << mazeVector[i][j].pathID % 10;
-					} else {
-						debugFile << 'E';
-					}
-				}
-			}
-		}
-		debugFile << '\n';
-	}
-	debugFile.close();
-}
 
 void write_image() {
 
@@ -55,7 +14,7 @@ void write_image() {
 
 	for (auto& iter : changedPos) { 
 
-		char* write_head = rawImageBlock + static_cast<unsigned char> (*(rawImageBlock + 10)) + (iter.first * (mazeNumberRows * 3 + rawPadding)) + (iter.second * 3);
+		char* write_head = rawImageBlock + static_cast<unsigned char> (*(rawImageBlock + 10)) + (iter.first * (mazeNumber.first * 3 + rawPadding)) + (iter.second * 3);
 
 		if (mazeVector[iter.first][iter.second].isWall) {
 			write_head[0] = 0x00;
@@ -130,21 +89,34 @@ enum COLOUR
 	BG_WHITE		= 0x00F0,
 };
 
-void write_console(const unsigned short maxColumn, const unsigned short maxRow) {
-	//Yes, I know the code looks like crap. Don't judge. I wrote this two  years ago (save for a couple changes here and there)
-	//Good thing is, it just works fine (except when the maze size is above 1000 in one dimension, in which case it just breaks down lol)
+class cmd_console {
 
-	HANDLE newConsoleHandle = GetStdHandle(STD_OUTPUT_HANDLE);
-	SMALL_RECT rectConsole = { 0, 0, static_cast<short>(maxColumn), static_cast<short>(maxRow) };
+public: 
+	cmd_console(std::pair <unsigned int, unsigned int> inputCoord);
+	void write_console();
+	~cmd_console();
+private:
+	std::pair <unsigned int, unsigned int> maxCoord;
+	HANDLE newConsoleHandle;
+	SMALL_RECT rectConsole;
+	COORD coordConsole;
+	CONSOLE_FONT_INFOEX cfi;
+	CONSOLE_SCREEN_BUFFER_INFO csbi;
+	CHAR_INFO* bufferConsole;
+};
+
+
+cmd_console::cmd_console(std::pair <unsigned int, unsigned int> inputCoord): maxCoord(inputCoord) {
+	newConsoleHandle = GetStdHandle(STD_OUTPUT_HANDLE);
+	rectConsole = { 0, 0, static_cast<short>(maxCoord.second), static_cast<short>(maxCoord.first) };
 	SetConsoleWindowInfo(newConsoleHandle, true, &rectConsole);
-	COORD coordConsole = { static_cast<short>(maxColumn), static_cast<short>(maxRow) };
+	coordConsole = { static_cast<short>(maxCoord.second), static_cast<short>(maxCoord.first) };
 	if (!SetConsoleScreenBufferSize(newConsoleHandle, coordConsole)) {
 		std::wcerr << L"ERROR IN SetConsoleScreenBufferSize";
 	}
 	if (!SetConsoleActiveScreenBuffer(newConsoleHandle)) {
 		std::wcerr << L"ERROR IN SetConsoleActiveScreenBuffer";
 	}
-	CONSOLE_FONT_INFOEX cfi;
 	cfi.cbSize = sizeof(cfi);
 	cfi.nFont = 0;
 	cfi.dwFontSize.X = 3;
@@ -155,45 +127,39 @@ void write_console(const unsigned short maxColumn, const unsigned short maxRow) 
 	if (!SetCurrentConsoleFontEx(newConsoleHandle, false, &cfi)) {
 		std::wcerr << L"SetCurrentConsoleFontEx";
 	}
-	CONSOLE_SCREEN_BUFFER_INFO csbi;
 	if (!GetConsoleScreenBufferInfo(newConsoleHandle, &csbi))
 		std::wcerr << L"GetConsoleScreenBufferInfo";
-	if (static_cast<signed int>(maxColumn) > csbi.dwMaximumWindowSize.Y)
+	if (static_cast<signed int>(maxCoord.second) > csbi.dwMaximumWindowSize.Y)
 		std::wcerr << L"Screen Height / Font Height Too Big";
-	if (static_cast<signed int>(maxRow) > csbi.dwMaximumWindowSize.X)
+	if (static_cast<signed int>(maxCoord.first) > csbi.dwMaximumWindowSize.X)
 		std::wcerr << "Screen Width / Font Width Too Big";
-	rectConsole = { 0, 0, (short)maxRow - 1, (short)maxColumn - 1 };
+	rectConsole = { 0, 0, (short)maxCoord.first - 1, (short)maxCoord.second - 1 };
 	if (!SetConsoleWindowInfo(newConsoleHandle, TRUE, &rectConsole))
 		std::wcerr << L"SetConsoleWindowInfo";
-	auto* bufferConsole = new CHAR_INFO[maxRow * maxColumn];
-	memset(bufferConsole, 0, sizeof(CHAR_INFO) * maxRow * maxColumn);
+	bufferConsole = new CHAR_INFO[maxCoord.first * maxCoord.second];
+	memset(bufferConsole, 0, sizeof(CHAR_INFO) * maxCoord.first * maxCoord.second);
+	return;
+};
 
-	while (true) {
-
-		for (int x = 0; static_cast<unsigned int>(x) < maxRow; x++) {
-			for (int y = 0; static_cast<unsigned int>(y) < maxColumn; y++) {
-				if (mazeVector[y][x].isWall) {
-					bufferConsole[y * maxRow + x].Char.UnicodeChar = PIXEL_QUARTER;
-					bufferConsole[y * maxRow + x].Attributes = FG_WHITE | BG_GREY;
-				} else if (mazeVector[y][x].isVisited) {
-					bufferConsole[y * maxRow + x].Char.UnicodeChar = PIXEL_SOLID;
-					bufferConsole[y * maxRow + x].Attributes = (mazeVector[y][x].pathID % 14) + 1;
-				} else {
-					bufferConsole[y * maxRow + x].Char.UnicodeChar = PIXEL_QUARTER;
-					bufferConsole[y * maxRow + x].Attributes = FG_GREY | BG_BLACK;
-				}
+void cmd_console::write_console() {
+	for (int x = 0; static_cast<unsigned int>(x) < maxCoord.first; x++) {
+		for (int y = 0; static_cast<unsigned int>(y) < maxCoord.second; y++) {
+			if (mazeVector[y][x].isWall) {
+				bufferConsole[y * maxCoord.first + x].Char.UnicodeChar = PIXEL_QUARTER;
+				bufferConsole[y * maxCoord.first + x].Attributes = FG_WHITE | BG_GREY;
+			} else if (mazeVector[y][x].isVisited) {
+				bufferConsole[y * maxCoord.first + x].Char.UnicodeChar = PIXEL_SOLID;
+				bufferConsole[y * maxCoord.first + x].Attributes = (mazeVector[y][x].pathID % 14) + 1;
+			} else {
+				bufferConsole[y * maxCoord.first + x].Char.UnicodeChar = PIXEL_QUARTER;
+				bufferConsole[y * maxCoord.first + x].Attributes = FG_GREY | BG_BLACK;
 			}
 		}
-		WriteConsoleOutput(newConsoleHandle, bufferConsole, { (short)maxColumn, (short)maxRow }, { 0,0 }, &rectConsole);
-
-		switch (int c = _getch()) {
-			case 102:
-				write_debug();
-		}
-		_getch();
-
-		isDebugComplete.notify_all();
 	}
+	WriteConsoleOutputW(newConsoleHandle, bufferConsole, { (short)maxCoord.second, (short)maxCoord.first }, { 0,0 }, &rectConsole);
+	return;
+}
 
-
+cmd_console::~cmd_console() {
+	delete bufferConsole;
 }
